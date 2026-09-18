@@ -1,25 +1,27 @@
-import { Order } from '@/domain/orders';
+import type { Order, OrderLine } from '../domain/orders';
+import { previewMenu } from './preview-menu';
 
-const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
-
-export const initialOrders: Order[] = [
-  { id: '148', displayNumber: 'MR-148', customerName: 'Ananya', customerPhone: '9830012345', source: 'qr', fulfilment: 'takeaway', status: 'received', paymentStatus: 'unpaid', total: 398, netPaid: 0, revision: 1, receivedAt: minutesAgo(2), lines: [
-    { id: '148-1', name: 'Veg Farmhouse Pizza', quantity: 1, unitPrice: 239 },
-    { id: '148-2', name: 'Iced Mocha', quantity: 1, unitPrice: 159 },
-  ] },
-  { id: '147', displayNumber: 'MR-147', customerName: 'Rohan', source: 'staff', fulfilment: 'dine_in', status: 'accepted', paymentStatus: 'paid', total: 577, netPaid: 577, revision: 2, receivedAt: minutesAgo(6), acceptedAt: minutesAgo(4), lines: [
-    { id: '147-1', name: 'BBQ Chicken Pizza', quantity: 2, unitPrice: 249, modifiers: ['No onion'] },
-    { id: '147-2', name: 'Virgin Classic Mojito', quantity: 1, unitPrice: 79 },
-  ] },
-  { id: '146', displayNumber: 'MR-146', customerName: 'Soham', source: 'qr', fulfilment: 'takeaway', status: 'accepted', paymentStatus: 'part_paid', total: 238, netPaid: 100, revision: 1, receivedAt: minutesAgo(9), acceptedAt: minutesAgo(7), lines: [
-    { id: '146-1', name: 'BBQ Chicken Momo Combo', quantity: 1, unitPrice: 159, modifiers: ['Extra cheese'] },
-    { id: '146-2', name: 'Blue Lagoon', quantity: 1, unitPrice: 79 },
-  ] },
-  { id: '145', displayNumber: 'MR-145', customerName: 'Priya', source: 'staff', fulfilment: 'takeaway', status: 'preparing', paymentStatus: 'unpaid', total: 328, netPaid: 0, revision: 1, receivedAt: minutesAgo(14), acceptedAt: minutesAgo(12), preparingAt: minutesAgo(8), lines: [
-    { id: '145-1', name: 'BBQ Chicken Pizza', quantity: 1, unitPrice: 249 },
-    { id: '145-2', name: 'Mystic Pineapple Splash', quantity: 1, unitPrice: 79 },
-  ] },
-  { id: '144', displayNumber: 'MR-144', customerName: 'Arjun', source: 'delivery', fulfilment: 'delivery', status: 'ready', paymentStatus: 'paid', total: 498, netPaid: 498, revision: 1, receivedAt: minutesAgo(22), acceptedAt: minutesAgo(20), preparingAt: minutesAgo(16), readyAt: minutesAgo(3), lines: [
-    { id: '144-1', name: 'Peri-Peri Chicken Pizza', quantity: 2, unitPrice: 249 },
-  ] },
-];
+export function initialOrders(): Order[] {
+  const ago = (n: number) => new Date(Date.now() - n * 60000).toISOString();
+  const line = (index: number, key: string, quantity = 1): OrderLine => {
+    const m = previewMenu[index];
+    return { id: key, menuItemId: m.id, name: m.name, quantity, unitPrice: m.price, selectedComponentIds: [], modifiers: [], note: '' };
+  };
+  const base = (number: number, customerName: string, lines: OrderLine[]): Order => ({
+    id: 'preview-' + number, displayNumber: 'MR-' + number, branchId: 'preview-batanagar', customerName,
+    source: 'staff_pos', fulfilment: 'takeaway', status: 'received', paymentStatus: 'unpaid',
+    total: lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0), netPaid: 0, revision: 1, version: 2,
+    consumedRevision: null, notes: '', receivedAt: ago(2), lines, payments: [], events: [], settlementConfirmed: false,
+  });
+  const received: Order = { ...base(148, 'Ananya', [line(1, '148-a'), line(4, '148-b')]), source: 'qr_customer' };
+  const accepted: Order = { ...base(147, 'Rohan', [line(0, '147-a', 2), line(6, '147-b')]), status: 'accepted', receivedAt: ago(8), acceptedAt: ago(6), fulfilment: 'dine_in', tableNumber: 3 };
+  accepted.lines[0].note = 'No onion';
+  const preparing: Order = { ...base(146, 'Priya', [line(0, '146-a'), line(5, '146-b')]), status: 'preparing', receivedAt: ago(19), acceptedAt: ago(16), preparingAt: ago(14), stockConsumedAt: ago(14), consumedRevision: 1 };
+  const ready: Order = { ...base(145, 'Arjun', [line(0, '145-a', 2)]), status: 'ready', receivedAt: ago(27), acceptedAt: ago(25), preparingAt: ago(20), stockConsumedAt: ago(20), readyAt: ago(4), consumedRevision: 1, netPaid: 498, paymentStatus: 'paid', settlementConfirmed: true };
+  ready.payments = [{ id: 'preview-payment-145', operationId: 'fixture-145', method: 'upi', kind: 'collection', amount: 498, reference: 'Sample payment', occurredAt: ago(5) }];
+  const cancelled: Order = { ...base(144, 'Sam', [line(2, '144-a')]), status: 'cancelled', total: 0, netPaid: 179, paymentStatus: 'refund_due', acceptedAt: ago(35), cancelledAt: ago(30), receivedAt: ago(40) };
+  cancelled.payments = [{ id: 'preview-payment-144', operationId: 'fixture-144', method: 'cash', kind: 'collection', amount: 179, reference: 'Sample payment', occurredAt: ago(34) }];
+  return [received, accepted, preparing, ready, cancelled].map(o => ({
+    ...o, events: [{ id: 'fixture-' + o.id, version: o.version, revision: o.revision, action: 'sample', occurredAt: o.receivedAt, description: 'Sample ticket loaded for preview' }],
+  }));
+}

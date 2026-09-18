@@ -2,11 +2,12 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { palette } from '@/constants/theme';
-import { OrderStoreProvider } from '@/state/order-store';
+import { OrderDataProvider } from '@/state/order-queries';
+import { UiProvider } from '@/state/ui-store';
 
 export default function RootLayout() {
   return (
-    <OrderStoreProvider>
+    <OrderDataProvider><UiProvider>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -15,6 +16,6 @@ export default function RootLayout() {
           animation: 'slide_from_right',
         }}
       />
-    </OrderStoreProvider>
+    </UiProvider></OrderDataProvider>
   );
 }

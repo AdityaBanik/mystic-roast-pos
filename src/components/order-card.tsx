@@ -1,63 +1,52 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-
-import { ActionButton } from '@/components/action-button';
-import { PaymentPill } from '@/components/payment-pill';
-import { palette, radii, shadow, spacing, typography } from '@/constants/theme';
-import { formatMoney, fulfilmentLabel, Order, sourceLabel } from '@/domain/orders';
-import { useOrderStore } from '@/state/order-store';
-
-function elapsedLabel(iso: string) {
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-}
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { PaymentPill } from './payment-pill';
+import { OrderActions } from './order-actions';
+import { palette, radii, typography } from '@/constants/theme';
+import { formatMoney, fulfilmentLabel, Order, sourceLabel, statusLabel, timerOrigin } from '@/domain/orders';
 
 export function OrderCard({ order }: { order: Order }) {
   const router = useRouter();
-  const { acceptOrder, startPreparing, markReady, completeOrder, recordPayment } = useOrderStore();
-  const timerOrigin = order.readyAt ?? order.preparingAt ?? order.acceptedAt ?? order.receivedAt;
-  const [, refreshTimer] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => refreshTimer((value) => value + 1), 1_000);
-    return () => clearInterval(timer);
-  }, []);
-  const actionLabel = { received: 'ACCEPT ORDER', accepted: 'START PREPARING', preparing: 'MARK READY', ready: 'COMPLETE ORDER', completed: 'COMPLETED', cancelled: 'CANCELLED' }[order.status];
-
-  const mainAction = () => {
-    if (order.status === 'received') acceptOrder(order.id);
-    else if (order.status === 'accepted') startPreparing(order.id);
-    else if (order.status === 'preparing') markReady(order.id);
-    else if (order.status === 'ready' && !completeOrder(order.id)) Alert.alert('Payment due', 'Record the outstanding payment before completing this order.');
-  };
-
-  return <Pressable onPress={() => router.push({ pathname: '/order/[id]', params: { id: order.id } })} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
-    <View style={styles.topRow}>
-      <View><Text style={styles.orderNumber}>#{order.displayNumber.replace('MR-', '')}</Text><Text style={styles.source}>{sourceLabel[order.source]} · {fulfilmentLabel[order.fulfilment]}</Text></View>
-      <View style={styles.timerWrap}><Text style={styles.timer}>{elapsedLabel(timerOrigin)}</Text><Text style={styles.timerCaption}>{order.status === 'ready' ? 'READY' : 'ELAPSED'}</Text></View>
-    </View>
-    <Text style={styles.customer}>{order.customerName}</Text>
-    <View style={styles.divider} />
-    <View style={styles.lines}>{order.lines.map((line) => <View key={line.id}>
-      <Text style={styles.line}><Text style={styles.quantity}>{line.quantity} × </Text>{line.name}</Text>
-      {line.modifiers?.map((modifier) => <Text key={modifier} style={styles.modifier}>↳ {modifier.toUpperCase()}</Text>)}
-    </View>)}</View>
-    <View style={styles.paymentRow}><Text style={styles.total}>{formatMoney(order.total)}</Text><PaymentPill order={order} /></View>
-    <View style={styles.actions}>
-      {order.paymentStatus !== 'paid' && <ActionButton label="RECORD PAYMENT" variant="secondary" onPress={() => recordPayment(order.id)} style={styles.secondaryAction} />}
-      <ActionButton label={actionLabel} onPress={mainAction} style={styles.primaryAction} />
-    </View>
-  </Pressable>;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  const seconds = Math.max(0, Math.floor((now - new Date(timerOrigin(order)).getTime()) / 1000));
+  const elapsed = String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+  const urgency = seconds >= 1200 ? 'LONG WAIT' : seconds >= 600 ? 'CHECK PROGRESS' : '';
+  return <View style={styles.card}>
+    <Pressable accessibilityRole="button" accessibilityLabel={'Open ' + order.displayNumber + ', ' + order.customerName + ', ' + statusLabel[order.status]} onPress={() => router.push({ pathname: '/order/[id]', params: { id: order.id } })} style={styles.ticket}>
+      <View style={styles.top}>
+        <View style={{ flex: 1 }}><Text style={styles.number}>{order.displayNumber}</Text><Text style={styles.meta}>{sourceLabel[order.source]}</Text></View>
+        <View style={{ alignItems: 'flex-end' }}><Text accessibilityLabel={Math.floor(seconds / 60) + ' minutes elapsed'} style={[styles.timer, urgency && { color: palette.red }]}>{elapsed}</Text><Text style={styles.meta}>{order.status === 'ready' ? 'READY FOR' : order.status === 'preparing' ? 'PREPARING FOR' : 'SINCE ORDER'}</Text>{!!urgency && <Text style={styles.urgency}>{urgency}</Text>}</View>
+      </View>
+      <Text style={styles.status}>{statusLabel[order.status]}</Text>
+      <Text style={[styles.customer, order.status === 'ready' && { fontSize: 25 }]}>{order.customerName}</Text>
+      <Text style={styles.fulfilment}>{fulfilmentLabel(order)}</Text>
+      <View style={styles.divider} />
+      {order.lines.map(line => <View key={line.id}>
+        <Text style={styles.line}>{line.quantity} × {line.name}</Text>
+        {line.modifiers.map((modifier, i) => <Text key={i} style={styles.modifier}>{modifier}</Text>)}
+        {!!line.note && <Text style={styles.modifier}>NOTE: {line.note.toUpperCase()}</Text>}
+      </View>)}
+      {!!order.notes && <Text style={styles.modifier}>ORDER NOTE: {order.notes}</Text>}
+      <View style={styles.top}><Text style={styles.total}>{formatMoney(order.total)}</Text><PaymentPill order={order} /></View>
+      <Text style={styles.meta}>VIEW TICKET ›</Text>
+    </Pressable>
+    <OrderActions order={order} />
+  </View>;
 }
-
 const styles = StyleSheet.create({
-  card: { backgroundColor: palette.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: palette.border, padding: spacing.lg, gap: spacing.md, minHeight: 330, ...shadow },
-  pressed: { opacity: 0.92 }, topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  orderNumber: { fontFamily: typography.serif, color: palette.ink, fontSize: 30, fontWeight: '800' }, source: { fontFamily: typography.sans, color: palette.inkMuted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, marginTop: 3 },
-  timerWrap: { alignItems: 'flex-end' }, timer: { fontFamily: typography.mono, color: palette.ink, fontSize: 21, fontWeight: '700' }, timerCaption: { color: palette.inkMuted, fontFamily: typography.sans, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
-  customer: { fontFamily: typography.sans, color: palette.inkMuted, fontSize: 14, fontWeight: '600' }, divider: { height: 1, backgroundColor: palette.border },
-  lines: { gap: spacing.md, flex: 1 }, line: { color: palette.ink, fontFamily: typography.sans, fontSize: 16, fontWeight: '700', lineHeight: 23 }, quantity: { color: palette.olive, fontWeight: '900' },
-  modifier: { color: palette.red, fontFamily: typography.sans, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, marginTop: 4, marginLeft: spacing.md },
-  paymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, total: { color: palette.ink, fontFamily: typography.serif, fontSize: 22, fontWeight: '800' },
-  actions: { flexDirection: 'row', gap: spacing.sm }, secondaryAction: { flex: 1 }, primaryAction: { flex: 1.25 },
+  card: { backgroundColor: palette.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: palette.border, padding: 18, gap: 18 },
+  ticket: { gap: 12, minHeight: 44 }, top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' },
+  number: { fontFamily: typography.serif, fontSize: 29, fontWeight: '800', color: palette.ink },
+  meta: { color: palette.inkMuted, fontSize: 10, fontWeight: '700', marginTop: 4 },
+  timer: { fontFamily: typography.mono, fontSize: 21, color: palette.ink, fontWeight: '700' },
+  urgency: { color: palette.red, fontSize: 10, fontWeight: '800', marginTop: 4 },
+  status: { alignSelf: 'flex-start', color: palette.oliveDark, backgroundColor: palette.oliveSoft, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, fontWeight: '800', fontSize: 11 },
+  customer: { color: palette.ink, fontWeight: '700', fontSize: 19 },
+  fulfilment: { color: palette.ink, fontSize: 13, fontWeight: '800' },
+  divider: { height: 1, backgroundColor: palette.border },
+  line: { color: palette.ink, fontSize: 16, fontWeight: '700', lineHeight: 24 },
+  modifier: { color: palette.red, fontSize: 12, fontWeight: '800', lineHeight: 20, marginLeft: 10 },
+  total: { color: palette.ink, fontFamily: typography.serif, fontSize: 22, fontWeight: '700' },
 });

@@ -28,6 +28,16 @@ Then open the project in Expo Go, an Android/iOS simulator, or press `w` for web
 
 This repository is an interactive UI starter. It deliberately uses mock data and does **not** mutate the live Mystic Roast Supabase project.
 
+The frontend now includes guarded order actions, payment/refund forms, revision
+editing, unused/waste classification, searchable order entry, session history,
+and receipt previews. Development runs in clearly labeled **preview** mode;
+production defaults to **not connected**. Set `EXPO_PUBLIC_ORDER_MODE=preview`
+explicitly for a sample-data build. Preview data resets on reload.
+
+Run `npm test`, `npm run typecheck`, and `npm run lint` for frontend checks.
+See [UI implementation status](docs/UI_IMPLEMENTATION_STATUS.md) for the exact
+scope, live integration blockers, and features that remain unavailable.
+
 The production integration must preserve these rules:
 
 1. Customer/staff submission performs no stock action.

@@ -1,10 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { palette, radii, spacing, typography } from '@/constants/theme';
-import { formatMoney, Order } from '@/domain/orders';
+import { amountDue, formatMoney, Order, refundDue } from '@/domain/orders';
 
 export function PaymentPill({ order }: { order: Order }) {
   const paid = order.paymentStatus === 'paid';
-  const label = paid ? 'PAID' : order.paymentStatus === 'part_paid' ? `${formatMoney(order.netPaid)} PAID` : order.paymentStatus === 'refund_due' ? 'REFUND DUE' : 'UNPAID';
+  const label = order.paymentStatus === 'refunded' ? 'REFUNDED' : refundDue(order) > 0 ? `${formatMoney(refundDue(order))} REFUND DUE` : paid ? 'PAID' : order.paymentStatus === 'part_paid' ? `${formatMoney(amountDue(order))} BALANCE DUE` : `${formatMoney(amountDue(order))} UNPAID`;
   return <View style={[styles.pill, paid ? styles.paid : styles.unpaid]}><Text style={[styles.text, paid ? styles.paidText : styles.unpaidText]}>{paid ? '● ' : ''}{label}</Text></View>;
 }
 
